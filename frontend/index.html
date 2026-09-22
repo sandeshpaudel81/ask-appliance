@@ -1,0 +1,1046 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ApplianceAI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0c0d0f;
+      --bg2:       #141518;
+      --bg3:       #1c1e22;
+      --bg4:       #242629;
+      --border:    #2a2d33;
+      --border2:   #363a42;
+      --accent:    #4ade9a;
+      --accent2:   #3bc882;
+      --amber:     #f59e0b;
+      --red:       #ef4444;
+      --text:      #e8eaed;
+      --text2:     #9aa0ad;
+      --text3:     #5c6370;
+      --mono:      'DM Mono', monospace;
+      --sans:      'Syne', sans-serif;
+      --radius:    10px;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 280px;
+      min-width: 280px;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .sidebar-header {
+      padding: 22px 20px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .logo {
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      color: var(--text);
+    }
+
+    .logo span { color: var(--accent); }
+
+    .logo-sub {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text3);
+      margin-top: 3px;
+      letter-spacing: 0.08em;
+    }
+
+    .add-btn {
+      margin: 14px 16px;
+      background: var(--accent);
+      color: #0c1a10;
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 700;
+      border: none;
+      border-radius: var(--radius);
+      padding: 10px 16px;
+      cursor: pointer;
+      width: calc(100% - 32px);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .add-btn:hover { background: var(--accent2); }
+    .add-btn:active { transform: scale(0.98); }
+
+    .add-btn svg { width: 15px; height: 15px; }
+
+    .appliance-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 10px;
+    }
+
+    .appliance-list::-webkit-scrollbar { width: 4px; }
+    .appliance-list::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    .appliance-item {
+      padding: 10px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: background 0.12s;
+      margin-bottom: 2px;
+    }
+
+    .appliance-item:hover { background: var(--bg3); }
+    .appliance-item.active { background: var(--bg4); }
+    .appliance-item.active .app-name { color: var(--accent); }
+
+    .app-icon {
+      width: 32px; height: 32px;
+      background: var(--bg4);
+      border-radius: 7px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .app-info { flex: 1; min-width: 0; }
+
+    .app-name {
+      font-size: 13px;
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .app-meta {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text3);
+      margin-top: 1px;
+    }
+
+    .app-delete {
+      width: 22px; height: 22px;
+      background: transparent;
+      border: none;
+      color: var(--text3);
+      cursor: pointer;
+      border-radius: 5px;
+      display: flex; align-items: center; justify-content: center;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s, color 0.15s;
+      flex-shrink: 0;
+    }
+
+    .appliance-item:hover .app-delete { opacity: 1; }
+    .app-delete:hover { background: #3a1515; color: var(--red); }
+
+    .empty-list {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text3);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.8;
+    }
+
+    /* ── Main area ── */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Top bar ── */
+    #topbar {
+      height: 58px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      gap: 14px;
+      background: var(--bg2);
+      flex-shrink: 0;
+    }
+
+    .topbar-title {
+      font-size: 15px;
+      font-weight: 700;
+      flex: 1;
+    }
+
+    .topbar-badge {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--accent);
+      background: #0f2e1e;
+      border: 1px solid #1a4a2e;
+      border-radius: 5px;
+      padding: 3px 8px;
+    }
+
+    .clear-btn {
+      background: transparent;
+      border: 1px solid var(--border2);
+      color: var(--text2);
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 5px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    .clear-btn:hover { border-color: var(--red); color: var(--red); }
+
+    /* ── Welcome screen ── */
+    #welcome {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      color: var(--text3);
+    }
+
+    .welcome-icon {
+      width: 64px; height: 64px;
+      background: var(--bg3);
+      border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 30px;
+    }
+
+    .welcome-title {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text2);
+    }
+
+    .welcome-sub {
+      font-family: var(--mono);
+      font-size: 12px;
+      text-align: center;
+      line-height: 1.8;
+    }
+
+    /* ── Chat view ── */
+    #chat-view {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    #messages::-webkit-scrollbar { width: 4px; }
+    #messages::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    .msg {
+      display: flex;
+      flex-direction: column;
+      max-width: 780px;
+      animation: fadeUp 0.25s ease;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .msg.user { align-self: flex-end; align-items: flex-end; }
+    .msg.assistant { align-self: flex-start; align-items: flex-start; }
+
+    .msg-role {
+      font-family: var(--mono);
+      font-size: 10px;
+      color: var(--text3);
+      margin-bottom: 5px;
+      letter-spacing: 0.06em;
+    }
+
+    .msg.user .msg-role { color: var(--accent); }
+
+    .msg-bubble {
+      padding: 14px 18px;
+      border-radius: 12px;
+      font-size: 14px;
+      line-height: 1.75;
+    }
+
+    .msg.user .msg-bubble {
+      background: #0f2e1e;
+      border: 1px solid #1a4a2e;
+      color: var(--text);
+      border-bottom-right-radius: 4px;
+    }
+
+    .msg.assistant .msg-bubble {
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-bottom-left-radius: 4px;
+    }
+
+    .msg-bubble p { margin-bottom: 10px; }
+    .msg-bubble p:last-child { margin-bottom: 0; }
+    .msg-bubble ol, .msg-bubble ul { margin: 8px 0 8px 20px; }
+    .msg-bubble li { margin-bottom: 4px; }
+    .msg-bubble strong { color: var(--accent); font-weight: 600; }
+
+    /* Source chips */
+    .sources {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .source-chip {
+      font-family: var(--mono);
+      font-size: 10px;
+      background: var(--bg4);
+      border: 1px solid var(--border2);
+      border-radius: 5px;
+      padding: 3px 8px;
+      color: var(--text3);
+      cursor: pointer;
+      transition: border-color 0.15s, color 0.15s;
+      position: relative;
+    }
+
+    .source-chip:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .source-chip:hover .source-tooltip {
+      display: block;
+    }
+
+    .source-tooltip {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 0;
+      background: var(--bg4);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      padding: 10px 12px;
+      width: 300px;
+      font-size: 11px;
+      color: var(--text2);
+      line-height: 1.6;
+      z-index: 100;
+      white-space: normal;
+    }
+
+    /* Typing indicator */
+    .typing-dots {
+      display: flex; gap: 4px; align-items: center; padding: 4px 0;
+    }
+
+    .typing-dots span {
+      width: 6px; height: 6px;
+      background: var(--text3);
+      border-radius: 50%;
+      animation: dot 1.2s infinite;
+    }
+
+    .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes dot {
+      0%, 80%, 100% { transform: scale(0.7); opacity: 0.4; }
+      40% { transform: scale(1); opacity: 1; }
+    }
+
+    /* ── Input area ── */
+    #input-area {
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      background: var(--bg2);
+    }
+
+    .quick-prompts {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .qp-btn {
+      font-family: var(--mono);
+      font-size: 11px;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text2);
+      border-radius: 6px;
+      padding: 5px 10px;
+      cursor: pointer;
+      transition: border-color 0.12s, color 0.12s, background 0.12s;
+    }
+
+    .qp-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: #0a1f13;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+    }
+
+    #user-input {
+      flex: 1;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      padding: 12px 16px;
+      resize: none;
+      outline: none;
+      min-height: 46px;
+      max-height: 140px;
+      transition: border-color 0.15s;
+      line-height: 1.5;
+    }
+
+    #user-input:focus { border-color: var(--accent); }
+    #user-input::placeholder { color: var(--text3); }
+
+    #send-btn {
+      width: 46px; height: 46px;
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius);
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    #send-btn:hover { background: var(--accent2); }
+    #send-btn:active { transform: scale(0.95); }
+    #send-btn:disabled { background: var(--bg4); cursor: not-allowed; }
+    #send-btn svg { color: #0c1a10; }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(4px);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 1000;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; } to { opacity: 1; }
+    }
+
+    .modal {
+      background: var(--bg2);
+      border: 1px solid var(--border2);
+      border-radius: 14px;
+      padding: 28px;
+      width: 440px;
+      max-width: calc(100vw - 40px);
+      animation: slideUp 0.2s ease;
+    }
+
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to   { transform: translateY(0);    opacity: 1; }
+    }
+
+    .modal-title {
+      font-size: 17px;
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    .form-group { margin-bottom: 16px; }
+
+    label {
+      display: block;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text3);
+      margin-bottom: 6px;
+      letter-spacing: 0.05em;
+    }
+
+    input[type=text], select {
+      width: 100%;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+
+    input[type=text]:focus, select:focus { border-color: var(--accent); }
+
+    select option { background: var(--bg3); }
+
+    .file-drop {
+      border: 2px dashed var(--border2);
+      border-radius: 10px;
+      padding: 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+    }
+
+    .file-drop:hover, .file-drop.drag-over {
+      border-color: var(--accent);
+      background: #0a1f13;
+    }
+
+    .file-drop p {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--text3);
+    }
+
+    .file-drop .file-name {
+      color: var(--accent);
+      margin-top: 6px;
+      font-size: 12px;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 22px;
+    }
+
+    .btn-cancel {
+      flex: 1;
+      background: var(--bg3);
+      border: 1px solid var(--border2);
+      color: var(--text2);
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .btn-cancel:hover { border-color: var(--border); }
+
+    .btn-submit {
+      flex: 2;
+      background: var(--accent);
+      border: none;
+      color: #0c1a10;
+      font-family: var(--sans);
+      font-size: 13px;
+      font-weight: 700;
+      padding: 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .btn-submit:hover { background: var(--accent2); }
+    .btn-submit:disabled { background: var(--bg4); color: var(--text3); cursor: not-allowed; }
+
+    .upload-progress {
+      margin-top: 12px;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--text3);
+      text-align: center;
+    }
+
+    .progress-bar-wrap {
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      animation: progress-pulse 1.5s ease-in-out infinite;
+    }
+
+    @keyframes progress-pulse {
+      0%   { width: 15%; }
+      50%  { width: 80%; }
+      100% { width: 95%; }
+    }
+
+    .error-msg {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--red);
+      margin-top: 8px;
+    }
+
+    /* Scrollbar for messages area */
+    #messages::-webkit-scrollbar-track { background: transparent; }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar ── -->
+<aside id="sidebar">
+  <div class="sidebar-header">
+    <div class="logo">Appliance<span>AI</span></div>
+    <div class="logo-sub">manual-grounded assistant</div>
+  </div>
+  <button class="add-btn" onclick="openModal()">
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <line x1="8" y1="2" x2="8" y2="14"/><line x1="2" y1="8" x2="14" y2="8"/>
+    </svg>
+    Add appliance
+  </button>
+  <div class="appliance-list" id="appliance-list">
+    <div class="empty-list">No appliances yet.<br/>Upload a manual to begin.</div>
+  </div>
+</aside>
+
+<!-- ── Main ── -->
+<main id="main">
+  <div id="topbar">
+    <span class="topbar-title" id="topbar-title">ApplianceAI</span>
+    <span class="topbar-badge" id="topbar-badge" style="display:none"></span>
+    <button class="clear-btn" id="clear-btn" onclick="clearHistory()" style="display:none">Clear chat</button>
+  </div>
+
+  <!-- Welcome -->
+  <div id="welcome" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;">
+    <div class="welcome-icon">🏠</div>
+    <div class="welcome-title">Your appliance expert</div>
+    <div class="welcome-sub" style="color:var(--text3);font-family:var(--mono);font-size:12px;text-align:center;line-height:1.8;">
+      Add an appliance manual on the left,<br/>then ask anything — usage, troubleshooting, safety.
+    </div>
+  </div>
+
+  <!-- Chat view -->
+  <div id="chat-view" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+    <div id="messages"></div>
+    <div id="input-area">
+      <div class="quick-prompts" id="quick-prompts">
+        <button class="qp-btn" onclick="quickSend('How do I use this?')">How do I use this?</button>
+        <button class="qp-btn" onclick="quickSend('What safety precautions should I know?')">Safety tips</button>
+        <button class="qp-btn" onclick="quickSend('How do I troubleshoot common problems?')">Troubleshoot</button>
+        <button class="qp-btn" onclick="quickSend('What maintenance does it need?')">Maintenance</button>
+      </div>
+      <div class="input-row">
+        <textarea id="user-input" placeholder="Ask about usage, troubleshooting, settings…" rows="1"
+          onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+        <button id="send-btn" onclick="sendMessage()" title="Send">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="9" y1="16" x2="9" y2="2"/><polyline points="3 8 9 2 15 8"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ── Add Appliance Modal ── -->
+<div class="modal-overlay" id="modal" style="display:none" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <div class="modal-title">Add appliance manual</div>
+    <div class="form-group">
+      <label>Appliance name *</label>
+      <input type="text" id="m-name" placeholder="e.g. Coffee Machine Pro 3000"/>
+    </div>
+    <div class="form-group">
+      <label>Brand</label>
+      <input type="text" id="m-brand" placeholder="e.g. DeLonghi"/>
+    </div>
+    <div class="form-group">
+      <label>Category</label>
+      <select id="m-category">
+        <option value="">Select category</option>
+        <option>Coffee Machine</option>
+        <option>Washing Machine</option>
+        <option>Dishwasher</option>
+        <option>Refrigerator</option>
+        <option>Microwave</option>
+        <option>Oven</option>
+        <option>Air Conditioner</option>
+        <option>Vacuum Cleaner</option>
+        <option>Air Fryer</option>
+        <option>Dryer</option>
+        <option>Other</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Manual PDF *</label>
+      <div class="file-drop" id="file-drop"
+        onclick="document.getElementById('file-input').click()"
+        ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+        <p>Click to browse or drag & drop</p>
+        <p style="font-size:10px;margin-top:4px;">.pdf files only</p>
+        <p class="file-name" id="file-name-display"></p>
+      </div>
+      <input type="file" id="file-input" accept=".pdf" style="display:none" onchange="fileSelected(this)"/>
+    </div>
+    <div class="error-msg" id="modal-error" style="display:none"></div>
+    <div class="upload-progress" id="upload-progress" style="display:none">
+      <span id="progress-text">Parsing & indexing manual…</span>
+      <div class="progress-bar-wrap"><div class="progress-bar"></div></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-submit" id="submit-btn" onclick="submitAppliance()">Index manual</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let appliances = [];
+let activeAppliance = null;
+let selectedFile = null;
+
+// ── Icons per category ──
+const ICONS = {
+  'Coffee Machine': '☕',
+  'Washing Machine': '🫧',
+  'Dishwasher': '🍽',
+  'Refrigerator': '❄️',
+  'Microwave': '📡',
+  'Oven': '🔥',
+  'Air Conditioner': '💨',
+  'Vacuum Cleaner': '🌀',
+  'Air Fryer': '🥦',
+  'Dryer': '♨️',
+  'Other': '🔧',
+};
+
+function getIcon(category) {
+  return ICONS[category] || '🔌';
+}
+
+// ── Load appliances ──
+async function loadAppliances() {
+  try {
+    const res = await fetch(`${API}/api/appliances/`);
+    appliances = await res.json();
+    renderAppliances();
+  } catch (e) {
+    console.error('Failed to load appliances', e);
+  }
+}
+
+function renderAppliances() {
+  const list = document.getElementById('appliance-list');
+  if (!appliances.length) {
+    list.innerHTML = '<div class="empty-list">No appliances yet.<br/>Upload a manual to begin.</div>';
+    return;
+  }
+  list.innerHTML = appliances.map(a => `
+    <div class="appliance-item ${activeAppliance?.id === a.id ? 'active' : ''}"
+         onclick="selectAppliance(${a.id})">
+      <div class="app-icon">${getIcon(a.category)}</div>
+      <div class="app-info">
+        <div class="app-name">${a.name}</div>
+        <div class="app-meta">${a.brand || a.category || 'manual indexed'} · ${a.chunk_count} chunks</div>
+      </div>
+      <button class="app-delete" onclick="deleteAppliance(event, ${a.id})" title="Remove">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+          <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
+        </svg>
+      </button>
+    </div>
+  `).join('');
+}
+
+async function selectAppliance(id) {
+  activeAppliance = appliances.find(a => a.id === id);
+  renderAppliances();
+
+  document.getElementById('topbar-title').textContent = activeAppliance.name;
+  const badge = document.getElementById('topbar-badge');
+  badge.textContent = activeAppliance.category || 'appliance';
+  badge.style.display = '';
+  document.getElementById('clear-btn').style.display = '';
+
+  document.getElementById('welcome').style.display = 'none';
+  document.getElementById('chat-view').style.display = 'flex';
+
+  // Load history
+  await loadHistory();
+}
+
+async function loadHistory() {
+  const res = await fetch(`${API}/api/chat/history/${activeAppliance.id}`);
+  const history = await res.json();
+  const msgs = document.getElementById('messages');
+  msgs.innerHTML = '';
+  for (const m of history) {
+    appendMessage(m.role, m.content, m.sources || []);
+  }
+  scrollBottom();
+}
+
+// ── Chat ──
+async function sendMessage() {
+  const input = document.getElementById('user-input');
+  const text = input.value.trim();
+  if (!text || !activeAppliance) return;
+
+  input.value = '';
+  autoResize(input);
+  document.getElementById('send-btn').disabled = true;
+
+  appendMessage('user', text, []);
+
+  // Typing indicator
+  const typingId = 'typing-' + Date.now();
+  const msgs = document.getElementById('messages');
+  msgs.innerHTML += `
+    <div class="msg assistant" id="${typingId}">
+      <div class="msg-role">ApplianceAI</div>
+      <div class="msg-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>
+    </div>`;
+  scrollBottom();
+
+  try {
+    const res = await fetch(`${API}/api/chat/`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({appliance_id: activeAppliance.id, message: text}),
+    });
+    const data = await res.json();
+    document.getElementById(typingId)?.remove();
+    appendMessage('assistant', data.answer, data.sources || []);
+  } catch (e) {
+    document.getElementById(typingId)?.remove();
+    appendMessage('assistant', '⚠️ Error connecting to server. Is the backend running?', []);
+  }
+
+  document.getElementById('send-btn').disabled = false;
+  scrollBottom();
+}
+
+function appendMessage(role, content, sources) {
+  const msgs = document.getElementById('messages');
+  const label = role === 'user' ? 'You' : 'ApplianceAI';
+  const formatted = formatContent(content);
+
+  let sourceHtml = '';
+  if (sources && sources.length) {
+    sourceHtml = `<div class="sources">${sources.map(s =>
+      `<div class="source-chip">
+        p.${s.page || '?'} · ${s.section || 'General'}
+        <div class="source-tooltip"><strong>${s.section || 'General'} (p.${s.page || '?'})</strong><br/><br/>${s.preview}</div>
+      </div>`
+    ).join('')}</div>`;
+  }
+
+  msgs.innerHTML += `
+    <div class="msg ${role}">
+      <div class="msg-role">${label}</div>
+      <div class="msg-bubble">${formatted}</div>
+      ${sourceHtml}
+    </div>`;
+}
+
+function formatContent(text) {
+  // Basic markdown-like formatting
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/^(\d+)\.\s(.+)$/gm, '<li>$2</li>')
+    .replace(/((<li>.*<\/li>\s*)+)/g, '<ol>$1</ol>')
+    .replace(/^-\s(.+)$/gm, '<li>$1</li>')
+    .replace(/\n\n/g, '</p><p>')
+    .replace(/^/, '<p>')
+    .replace(/$/, '</p>');
+}
+
+function quickSend(text) {
+  document.getElementById('user-input').value = text;
+  sendMessage();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 140) + 'px';
+}
+
+function scrollBottom() {
+  const msgs = document.getElementById('messages');
+  msgs.scrollTop = msgs.scrollHeight;
+}
+
+async function clearHistory() {
+  if (!activeAppliance) return;
+  if (!confirm('Clear chat history for this appliance?')) return;
+  await fetch(`${API}/api/chat/history/${activeAppliance.id}`, {method: 'DELETE'});
+  document.getElementById('messages').innerHTML = '';
+}
+
+// ── Delete appliance ──
+async function deleteAppliance(e, id) {
+  e.stopPropagation();
+  if (!confirm('Remove this appliance and its index?')) return;
+  await fetch(`${API}/api/appliances/${id}`, {method: 'DELETE'});
+  if (activeAppliance?.id === id) {
+    activeAppliance = null;
+    document.getElementById('welcome').style.display = 'flex';
+    document.getElementById('chat-view').style.display = 'none';
+    document.getElementById('topbar-title').textContent = 'ApplianceAI';
+    document.getElementById('topbar-badge').style.display = 'none';
+    document.getElementById('clear-btn').style.display = 'none';
+  }
+  await loadAppliances();
+}
+
+// ── Modal ──
+function openModal() {
+  document.getElementById('modal').style.display = 'flex';
+  document.getElementById('modal-error').style.display = 'none';
+  document.getElementById('upload-progress').style.display = 'none';
+  document.getElementById('submit-btn').disabled = false;
+}
+
+function closeModal() {
+  document.getElementById('modal').style.display = 'none';
+  document.getElementById('m-name').value = '';
+  document.getElementById('m-brand').value = '';
+  document.getElementById('m-category').value = '';
+  document.getElementById('file-name-display').textContent = '';
+  document.getElementById('file-drop').classList.remove('drag-over');
+  selectedFile = null;
+}
+
+function closeModalOutside(e) {
+  if (e.target === document.getElementById('modal')) closeModal();
+}
+
+function fileSelected(input) {
+  if (input.files[0]) {
+    selectedFile = input.files[0];
+    document.getElementById('file-name-display').textContent = selectedFile.name;
+  }
+}
+
+function dragOver(e) {
+  e.preventDefault();
+  document.getElementById('file-drop').classList.add('drag-over');
+}
+
+function dragLeave() {
+  document.getElementById('file-drop').classList.remove('drag-over');
+}
+
+function dropFile(e) {
+  e.preventDefault();
+  dragLeave();
+  const file = e.dataTransfer.files[0];
+  if (file && file.name.endsWith('.pdf')) {
+    selectedFile = file;
+    document.getElementById('file-name-display').textContent = file.name;
+  }
+}
+
+async function submitAppliance() {
+  const name = document.getElementById('m-name').value.trim();
+  const errorEl = document.getElementById('modal-error');
+  errorEl.style.display = 'none';
+
+  if (!name) { showError('Appliance name is required.'); return; }
+  if (!selectedFile) { showError('Please select a PDF manual.'); return; }
+
+  document.getElementById('submit-btn').disabled = true;
+  document.getElementById('upload-progress').style.display = 'block';
+
+  const form = new FormData();
+  form.append('name', name);
+  form.append('brand', document.getElementById('m-brand').value.trim());
+  form.append('category', document.getElementById('m-category').value);
+  form.append('manual', selectedFile);
+
+  try {
+    const res = await fetch(`${API}/api/appliances/`, {method: 'POST', body: form});
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Upload failed');
+    }
+    const newAppliance = await res.json();
+    closeModal();
+    await loadAppliances();
+    selectAppliance(newAppliance.id);
+  } catch (e) {
+    document.getElementById('upload-progress').style.display = 'none';
+    document.getElementById('submit-btn').disabled = false;
+    showError(e.message);
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('modal-error');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+// ── Init ──
+loadAppliances();
+</script>
+</body>
+</html>
