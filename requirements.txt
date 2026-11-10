@@ -2,7 +2,9 @@ fastapi
 uvicorn[standard]
 python-multipart
 google-genai
-faiss-cpu
+llama-index-core
+llama-index-embeddings-google-genai
+llama-index-llms-google-genai
 numpy
 pymupdf
 pdfplumber

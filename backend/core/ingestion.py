@@ -1,41 +1,53 @@
 """
-Ingestion pipeline (mirrors ingestion.ipynb):
+Ingestion pipeline (LlamaIndex):
   1. Extract text (pymupdf) + tables (pdfplumber)
-  2. Clean pages + section-aware sliding-window chunking
-  3. Embed with Gemini gemini-embedding-001
-  4. Store per-appliance FAISS index
+  2. Clean pages, detect section headings
+  3. Chunk with LlamaIndex SentenceSplitter (tables kept whole)
+  4. Embed with Gemini gemini-embedding-001
+  5. Persist a per-appliance LlamaIndex VectorStoreIndex
 """
+import asyncio
 import os
 import re
-import json
 import tempfile
 from pathlib import Path
 
 import fitz  # pymupdf
 import pdfplumber
-import faiss
-import numpy as np
-from google import genai
-from google.genai import types
+from llama_index.core import (
+    Document,
+    StorageContext,
+    VectorStoreIndex,
+    load_index_from_storage,
+)
+from llama_index.core.node_parser import SentenceSplitter
+from llama_index.core.schema import TextNode
+from llama_index.embeddings.google_genai import GoogleGenAIEmbedding
 
-EMBED_MODEL = "models/gemini-embedding-001"
-EMBED_DIM = 3072
+EMBED_MODEL = "gemini-embedding-001"
 
-CHUNK_SIZE = 500        # target words per chunk
-CHUNK_OVERLAP = 60      # words of overlap between consecutive chunks
+CHUNK_SIZE = 512        # tokens per chunk
+CHUNK_OVERLAP = 64      # tokens of overlap between consecutive chunks
 MIN_CHUNK_WORDS = 25    # discard chunks shorter than this
 EMBED_BATCH_SIZE = 20
 INDEXES_DIR = Path("indexes")
 
-_client = None
+# Metadata kept on every node but hidden from the embedding / LLM text
+_HIDDEN_METADATA = ["type", "appliance"]
+
+_embed_model = None
 
 
-def get_client() -> genai.Client:
-    """Lazily create the Gemini client so .env is loaded first."""
-    global _client
-    if _client is None:
-        _client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-    return _client
+def get_embed_model() -> GoogleGenAIEmbedding:
+    """Lazily create the embedding model so .env is loaded first."""
+    global _embed_model
+    if _embed_model is None:
+        _embed_model = GoogleGenAIEmbedding(
+            model_name=EMBED_MODEL,
+            api_key=os.getenv("GEMINI_API_KEY"),
+            embed_batch_size=EMBED_BATCH_SIZE,
+        )
+    return _embed_model
 
 
 # Regex to detect section headings
@@ -109,51 +121,46 @@ def _clean_page(raw_text: str) -> tuple[str, str]:
     return cleaned, section
 
 
-def _build_chunks(pages: list[dict], tables: list[dict], appliance_name: str) -> list[dict]:
-    chunks = []
-    step = CHUNK_SIZE - CHUNK_OVERLAP
-
+def _build_nodes(pages: list[dict], tables: list[dict], appliance_name: str) -> list[TextNode]:
+    # Text pages → Documents → SentenceSplitter nodes
+    documents = []
     for page_data in pages:
         cleaned, section = _clean_page(page_data["text"])
-        words = cleaned.split()
-        if len(words) < MIN_CHUNK_WORDS:
+        if len(cleaned.split()) < MIN_CHUNK_WORDS:
             continue
-        for start in range(0, len(words), step):
-            chunk_words = words[start : start + CHUNK_SIZE]
-            if len(chunk_words) < MIN_CHUNK_WORDS:
-                continue
-            chunks.append({
-                "text": " ".join(chunk_words),
+        documents.append(Document(
+            text=cleaned,
+            metadata={
                 "page": page_data["page"],
                 "section": section,
                 "type": "text",
                 "appliance": appliance_name,
-            })
+            },
+            excluded_embed_metadata_keys=_HIDDEN_METADATA,
+            excluded_llm_metadata_keys=_HIDDEN_METADATA,
+        ))
 
+    splitter = SentenceSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+    nodes = [
+        n for n in splitter.get_nodes_from_documents(documents)
+        if len(n.get_content().split()) >= MIN_CHUNK_WORDS
+    ]
+
+    # Tables are kept whole so rows aren't split apart
     for table_data in tables:
-        chunks.append({
-            "text": table_data["text"],
-            "page": table_data["page"],
-            "section": "Tables / Specifications",
-            "type": "table",
-            "appliance": appliance_name,
-        })
+        nodes.append(TextNode(
+            text=table_data["text"],
+            metadata={
+                "page": table_data["page"],
+                "section": "Tables / Specifications",
+                "type": "table",
+                "appliance": appliance_name,
+            },
+            excluded_embed_metadata_keys=_HIDDEN_METADATA,
+            excluded_llm_metadata_keys=_HIDDEN_METADATA,
+        ))
 
-    return chunks
-
-
-async def _embed_texts(texts: list[str], task_type: str) -> np.ndarray:
-    client = get_client()
-    all_vecs = []
-    for i in range(0, len(texts), EMBED_BATCH_SIZE):
-        batch = texts[i : i + EMBED_BATCH_SIZE]
-        result = await client.aio.models.embed_content(
-            model=EMBED_MODEL,
-            contents=batch,
-            config=types.EmbedContentConfig(task_type=task_type),
-        )
-        all_vecs.extend(e.values for e in result.embeddings)
-    return np.array(all_vecs, dtype="float32")
+    return nodes
 
 
 async def ingest_pdf(
@@ -167,55 +174,37 @@ async def ingest_pdf(
     """
     pages = _extract_text_pymupdf(pdf_bytes)
     tables = _extract_tables_pdfplumber(pdf_bytes)
-    all_chunks = _build_chunks(pages, tables, appliance_name)
+    nodes = _build_nodes(pages, tables, appliance_name)
 
-    if not all_chunks:
+    if not nodes:
         raise ValueError("No extractable content found in PDF.")
 
-    embeddings = await _embed_texts([c["text"] for c in all_chunks], "RETRIEVAL_DOCUMENT")
+    # Embed asynchronously, then build the index from pre-embedded nodes
+    embed_model = get_embed_model()
+    texts = [n.get_content(metadata_mode="embed") for n in nodes]
+    embeddings = await embed_model.aget_text_embedding_batch(texts)
+    for node, emb in zip(nodes, embeddings):
+        node.embedding = emb
 
-    # Normalise → cosine similarity via inner product
-    faiss.normalize_L2(embeddings)
-    index = faiss.IndexFlatIP(EMBED_DIM)
-    index.add(embeddings)
+    index = VectorStoreIndex(nodes, embed_model=embed_model)
 
     index_dir = INDEXES_DIR / str(appliance_id)
     index_dir.mkdir(parents=True, exist_ok=True)
-
-    faiss.write_index(index, str(index_dir / "index.faiss"))
-    with open(index_dir / "chunks.json", "w", encoding="utf-8") as f:
-        json.dump(all_chunks, f, ensure_ascii=False, indent=2)
+    await asyncio.to_thread(index.storage_context.persist, persist_dir=str(index_dir))
 
     return {
-        "chunk_count": index.ntotal,
+        "chunk_count": len(nodes),
         "index_path": str(index_dir),
     }
 
 
-async def query_index(
-    appliance_id: int,
-    query: str,
-    top_k: int = 4,
-) -> list[dict]:
-    """
-    Retrieve top-k chunks for a query from an appliance's FAISS index.
-    Returns list of {text, page, section, score}.
-    """
+async def load_index(appliance_id: int) -> VectorStoreIndex:
+    """Load an appliance's persisted LlamaIndex index."""
     index_dir = INDEXES_DIR / str(appliance_id)
-    if not index_dir.exists():
+    if not (index_dir / "docstore.json").exists():
         raise FileNotFoundError(f"No index for appliance {appliance_id}")
 
-    index = faiss.read_index(str(index_dir / "index.faiss"))
-    with open(index_dir / "chunks.json", encoding="utf-8") as f:
-        chunks = json.load(f)
-
-    q_vec = await _embed_texts([query], "RETRIEVAL_QUERY")
-    faiss.normalize_L2(q_vec)
-
-    scores, indices = index.search(q_vec, top_k)
-    results = []
-    for score, idx in zip(scores[0], indices[0]):
-        if idx < 0:
-            continue
-        results.append({**chunks[idx], "score": float(score)})
-    return results
+    storage_context = StorageContext.from_defaults(persist_dir=str(index_dir))
+    return await asyncio.to_thread(
+        load_index_from_storage, storage_context, embed_model=get_embed_model()
+    )

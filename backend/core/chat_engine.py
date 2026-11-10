@@ -1,10 +1,17 @@
 """
-Chat engine: retrieves context → calls Gemini.
+Chat engine (LlamaIndex):
+  condense follow-up question → retrieve top chunks → Gemini answers from manual excerpts.
 """
-from google.genai import types
-from .ingestion import query_index, get_client
+import os
+
+from llama_index.core.chat_engine import CondensePlusContextChatEngine
+from llama_index.core.llms import ChatMessage, MessageRole
+from llama_index.llms.google_genai import GoogleGenAI
+
+from .ingestion import load_index
 
 LLM_MODEL = "gemini-3.6-flash"
+TOP_K = 4
 
 SYSTEM_PROMPT = """You are an expert home appliance assistant. You help users with:
 - How to USE their appliance correctly (modes, settings, temperatures, programs)
@@ -20,14 +27,26 @@ Always be specific: mention exact settings, temperatures, spin speeds, or progra
 Format your answers clearly with numbered steps when describing a process.
 Highlight safety warnings prominently."""
 
-def _build_context(chunks: list[dict]) -> str:
-    parts = []
-    for i, c in enumerate(chunks, 1):
-        parts.append(
-            f"[Excerpt {i} — Page {c.get('page','?')}, Section: {c.get('section','General')}]\n"
-            f"{c['text']}"
+# {context_str} is filled in by LlamaIndex with the retrieved chunks (incl. page/section)
+CONTEXT_PROMPT = """MANUAL EXCERPTS FOR {appliance}:
+
+{{context_str}}
+
+Use ONLY the excerpts above (and the previous chat history) to answer the user."""
+
+_llm = None
+
+
+def get_llm() -> GoogleGenAI:
+    """Lazily create the LLM so .env is loaded first."""
+    global _llm
+    if _llm is None:
+        _llm = GoogleGenAI(
+            model=LLM_MODEL,
+            api_key=os.getenv("GEMINI_API_KEY"),
+            temperature=0.2,
         )
-    return "\n\n---\n\n".join(parts)
+    return _llm
 
 
 async def chat(
@@ -40,44 +59,39 @@ async def chat(
     Full RAG chat turn.
     Returns {"answer": str, "sources": list[dict]}
     """
-    # 1. Retrieve (same as notebook: top 4 by cosine similarity)
-    top_chunks = await query_index(appliance_id, user_message, top_k=4)
+    index = await load_index(appliance_id)
 
-    # 2. Build prompt
-    context = _build_context(top_chunks)
-    system = SYSTEM_PROMPT.replace("{appliance}", appliance_name)
+    # Braces in the appliance name would break the prompt template
+    safe_name = appliance_name.replace("{", "(").replace("}", ")")
 
-    system_instruction = (
-        f"{system}\n\nMANUAL EXCERPTS FOR {appliance_name.upper()}:\n\n{context}"
+    engine = CondensePlusContextChatEngine.from_defaults(
+        retriever=index.as_retriever(similarity_top_k=TOP_K),
+        llm=get_llm(),
+        system_prompt=SYSTEM_PROMPT.replace("{appliance}", safe_name),
+        context_prompt=CONTEXT_PROMPT.format(appliance=safe_name.upper()),
     )
 
-    # Include last 6 turns of history for continuity (Gemini uses "model" for assistant)
-    contents = []
-    for turn in history[-6:]:
-        role = "model" if turn["role"] == "assistant" else "user"
-        contents.append(types.Content(role=role, parts=[types.Part(text=turn["content"])]))
-    contents.append(types.Content(role="user", parts=[types.Part(text=user_message)]))
+    # Last 6 turns of history for continuity
+    chat_history = [
+        ChatMessage(
+            role=MessageRole.ASSISTANT if turn["role"] == "assistant" else MessageRole.USER,
+            content=turn["content"],
+        )
+        for turn in history[-6:]
+    ]
 
-    # 3. Call LLM
-    response = await get_client().aio.models.generate_content(
-        model=LLM_MODEL,
-        contents=contents,
-        config=types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            temperature=0.2,
-        ),
-    )
-    answer = response.text or "I couldn't generate an answer. Please try again."
+    response = await engine.achat(user_message, chat_history=chat_history)
+    answer = response.response or "I couldn't generate an answer. Please try again."
 
-    # 4. Build source references for UI
+    # Source references for UI
     sources = [
         {
-            "page": c.get("page"),
-            "section": c.get("section"),
-            "preview": c["text"][:160] + "…",
-            "score": round(c.get("score", 0), 3),
+            "page": n.node.metadata.get("page"),
+            "section": n.node.metadata.get("section"),
+            "preview": n.node.get_content()[:160] + "…",
+            "score": round(n.score or 0, 3),
         }
-        for c in top_chunks
+        for n in response.source_nodes
     ]
 
     return {"answer": answer, "sources": sources}

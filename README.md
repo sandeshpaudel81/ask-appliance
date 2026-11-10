@@ -14,7 +14,8 @@ Upload an appliance manual (PDF), then ask about usage, settings, troubleshootin
 | Embeddings | Gemini gemini-embedding-001 |
 | PDF text | PyMuPDF (fitz) |
 | PDF tables | pdfplumber |
-| Vector search | FAISS (one index per appliance) |
+| RAG framework | LlamaIndex (SentenceSplitter, VectorStoreIndex, CondensePlusContextChatEngine) |
+| Vector store | LlamaIndex vector store (one persisted index per appliance) |
 | Backend | FastAPI + SQLAlchemy async |
 | Database | SQLite (aiosqlite) |
 | Frontend | Vanilla HTML/CSS/JS (dark theme) |
@@ -30,8 +31,8 @@ appliance-ai/
 ├── app_demo.png                   # Screenshot used in this README
 ├── backend/
 │   ├── core/
-│   │   ├── ingestion.py           # PDF parse → chunk → embed → FAISS
-│   │   └── chat_engine.py         # RAG query → Gemini
+│   │   ├── ingestion.py           # PDF parse → LlamaIndex chunk → embed → index
+│   │   └── chat_engine.py         # LlamaIndex chat engine → Gemini
 │   ├── models/
 │   │   └── database.py            # SQLAlchemy models (Appliance, ChatMessage)
 │   └── routers/
@@ -39,10 +40,11 @@ appliance-ai/
 │       └── chat.py                # POST /api/chat/, GET history, DELETE history
 ├── frontend/
 │   └── index.html                 # Full single-page app
-├── indexes/                       # FAISS indexes (auto-created, gitignore)
+├── indexes/                       # LlamaIndex indexes (auto-created, gitignore)
 │   └── {appliance_id}/
-│       ├── index.faiss
-│       └── chunks.json
+│       ├── docstore.json
+│       ├── default__vector_store.json
+│       └── index_store.json
 └── data/                          # SQLite DB (auto-created, gitignore)
     └── appliance_ai.db
 ```
@@ -88,27 +90,28 @@ Then open http://localhost:8000
 PDF bytes
   ↓ PyMuPDF       → text per page
   ↓ pdfplumber    → tables as markdown
-  ↓ Chunker       → clean pages, sliding window (500 words, 60 overlap), section-aware
+  ↓ Clean pages   → strip page numbers/noise, detect section headings
+  ↓ SentenceSplitter → 512-token chunks, 64 overlap (tables kept whole)
   ↓ Gemini embed  → 3072-dim vectors (gemini-embedding-001)
-  ↓ FAISS         → IndexFlatIP (cosine after L2 normalisation)
-  ↓ Persist       → indexes/{id}/index.faiss + chunks.json
+  ↓ VectorStoreIndex → persisted to indexes/{id}/
 ```
 
 ## RAG chat pipeline
 
 ```
 User query
-  ↓ Embed query (same model)
-  ↓ FAISS search  → top 4 chunks
-  ↓ Build prompt  → system + manual excerpts + last 6 turns
+  ↓ Condense      → rewrite follow-ups into a standalone question (uses last 6 turns)
+  ↓ Retrieve      → embed query, top 4 chunks by cosine similarity
+  ↓ Build prompt  → system + manual excerpts (page/section) + chat history
   ↓ Gemini        → grounded answer
   ↓ Return        → answer + source references (page, section, preview)
 ```
 
 ## Key design decisions
 
-- **One FAISS index per appliance** — allows clean delete/update without rebuilding everything
-- **Section-aware chunking** — detects numbered headings, WARNING/SAFETY blocks
+- **One index per appliance** — allows clean delete/update without rebuilding everything
+- **Section-aware chunking** — detects numbered headings, WARNING/SAFETY blocks; LlamaIndex SentenceSplitter avoids cutting sentences in half
+- **Condense + context chat** — follow-up questions like "is it good for cakes?" are rewritten using chat history before retrieval
 - **Source chips in UI** — every answer shows which page/section it came from; hover for preview
 - **SQLite** — zero-config, perfect for single-user local tool; swap to Postgres + pgvector for multi-user
 
