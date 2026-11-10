@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -17,7 +20,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="ApplianceAI",
+    title="AskAppliance",
     description="Domain-specific AI assistant for home appliance manuals",
     version="1.0.0",
     lifespan=lifespan,
@@ -46,4 +49,4 @@ if frontend_dir.exists():
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "ApplianceAI"}
+    return {"status": "ok", "service": "AskAppliance"}

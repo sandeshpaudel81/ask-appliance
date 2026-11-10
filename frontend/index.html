@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>ApplianceAI</title>
+  <title>AskAppliance</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
   <style>
@@ -654,7 +654,7 @@
 <!-- ── Main ── -->
 <main id="main">
   <div id="topbar">
-    <span class="topbar-title" id="topbar-title">ApplianceAI</span>
+    <span class="topbar-title" id="topbar-title">AskAppliance</span>
     <span class="topbar-badge" id="topbar-badge" style="display:none"></span>
     <button class="clear-btn" id="clear-btn" onclick="clearHistory()" style="display:none">Clear chat</button>
   </div>
@@ -847,7 +847,7 @@ async function sendMessage() {
   const msgs = document.getElementById('messages');
   msgs.innerHTML += `
     <div class="msg assistant" id="${typingId}">
-      <div class="msg-role">ApplianceAI</div>
+      <div class="msg-role">AskAppliance</div>
       <div class="msg-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>
     </div>`;
   scrollBottom();
@@ -872,7 +872,7 @@ async function sendMessage() {
 
 function appendMessage(role, content, sources) {
   const msgs = document.getElementById('messages');
-  const label = role === 'user' ? 'You' : 'ApplianceAI';
+  const label = role === 'user' ? 'You' : 'AskAppliance';
   const formatted = formatContent(content);
 
   let sourceHtml = '';
@@ -944,7 +944,7 @@ async function deleteAppliance(e, id) {
     activeAppliance = null;
     document.getElementById('welcome').style.display = 'flex';
     document.getElementById('chat-view').style.display = 'none';
-    document.getElementById('topbar-title').textContent = 'ApplianceAI';
+    document.getElementById('topbar-title').textContent = 'AskAppliance';
     document.getElementById('topbar-badge').style.display = 'none';
     document.getElementById('clear-btn').style.display = 'none';
   }
